@@ -18,9 +18,8 @@ function nologpass_form_user_login_alter(&$form, &$form_state, $form_id) {
 /**
  * Modified version of user_login_final_validate.
  *
- * Adds a check to see if
- * username provided is a valid user. If not, stores the IP of the user rather
- * than the value entered.
+ * Adds a check to see if username provided is a valid user. If not, stores the
+ * IP of the user rather than the value entered.
  */
 function nologpass_login_final_validate($form, &$form_state) {
   if (empty($form_state['uid'])) {
