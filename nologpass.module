@@ -1,0 +1,61 @@
+<?php
+/**
+ * @file
+ * Overrides the User Login form validate array.
+ */
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Replaces the last validate function (user_login_final_validate()) with a
+ * slightly modified version of the same function.
+ */
+function nologpass_form_user_login_alter(&$form, &$form_state, $form_id) {
+  array_pop($form['#validate']);
+  $form['#validate'][] = 'nologpass_login_final_validate';
+}
+
+/**
+ * Modified version of user_login_final_validate.
+ *
+ * Adds a check to see if
+ * username provided is a valid user. If not, stores the IP of the user rather
+ * than the value entered.
+ */
+function nologpass_login_final_validate($form, &$form_state) {
+  if (empty($form_state['uid'])) {
+    // Always register an IP-based failed login event.
+    flood_register_event('failed_login_attempt_ip', variable_get('user_failed_login_ip_window', 3600));
+    // Register a per-user failed login event.
+    if (isset($form_state['flood_control_user_identifier'])) {
+      flood_register_event('failed_login_attempt_user', variable_get('user_failed_login_user_window', 21600), $form_state['flood_control_user_identifier']);
+    }
+
+    if (isset($form_state['flood_control_triggered'])) {
+      if ($form_state['flood_control_triggered'] == 'user') {
+        form_set_error('name', format_plural(variable_get('user_failed_login_user_limit', 5), 'Sorry, there has been more than one failed login attempt for this account. It is temporarily blocked. Try again later or <a href="@url">request a new password</a>.', 'Sorry, there have been more than @count failed login attempts for this account. It is temporarily blocked. Try again later or <a href="@url">request a new password</a>.', array('@url' => url('user/password'))));
+      }
+      else {
+        // We did not find a uid, so the limit is IP-based.
+        form_set_error('name', t('Sorry, too many failed login attempts from your IP address. This IP address is temporarily blocked. Try again later or <a href="@url">request a new password</a>.', array('@url' => url('user/password'))));
+      }
+    }
+    else {
+      form_set_error('name', t('Sorry, unrecognized username or password. <a href="@password">Have you forgotten your password?</a>', array('@password' => url('user/password'))));
+      if (user_load_by_name($form_state['values']['name'])) {
+        watchdog('user', 'Login attempt failed for %user.', array('%user' => $form_state['values']['name']));
+      }
+      else {
+        // If the username entered is not a valid user, only store the IP
+        // address.
+        watchdog('user', 'Login attempt failed from %ip.', array('%ip' => ip_address()));
+      }
+    }
+  }
+  elseif (isset($form_state['flood_control_user_identifier'])) {
+    // Clear past failures for this user so as not to block a user who might
+    // log in and out more than once in an hour.
+    flood_clear_event('failed_login_attempt_user', $form_state['flood_control_user_identifier']);
+  }
+}
+
